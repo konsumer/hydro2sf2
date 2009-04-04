@@ -1,0 +1,242 @@
+#!/usr/bin/env python
+import xml.dom.minidom
+import sys
+from os import path, system, walk, chdir, getcwd
+from distutils.dir_util import remove_tree
+import mimetypes
+from tempfile import mkdtemp
+import tarfile
+
+from jMksf import Sf
+
+COPYRIGHT = '2006, David Konsumer <david.konsumer@gmail.com>'
+RELEASE ='0.1'
+DEBUG = False
+
+# put hydrogen drumkit.xml file into dict
+def parseHydrogenDrumkit(filename):
+    hydroData={}
+    doc=xml.dom.minidom.parse(filename)
+    for e in doc.childNodes[0].childNodes:
+        if e.nodeType == e.ELEMENT_NODE:
+            if e.localName == 'instrumentList':
+                hydroData['instruments']={}
+                for ins in e.childNodes:
+                    if ins.localName == 'instrument':
+                        layer=0
+                        for i in ins.childNodes:
+                            if i.localName == 'id':
+                                id=int(i.firstChild.nodeValue)
+                                hydroData['instruments'][id]={}
+                                hydroData['instruments'][id]['layers']={}
+                                hydroData['instruments'][id]['midikey']=36+id
+                            
+                            # this instrument has multiple layers
+                            elif i.localName == 'layer':
+                                hydroData['instruments'][id]['layers'][layer]={}
+                                for l in i.childNodes:
+                                    try:
+                                        if str(l.localName) == 'filename':
+                                            lfilename=path.join(path.dirname(filename),str(l.firstChild.nodeValue))
+                                            hydroData['instruments'][id]['layers'][layer]['filename']=lfilename
+                                        elif str(l.localName) == 'gain':
+                                            hydroData['instruments'][id]['layers'][layer]['gain']=int(float(l.firstChild.nodeValue)*127)
+                                        elif str(l.localName) == 'min':
+                                            hydroData['instruments'][id]['layers'][layer]['min']=int(float(l.firstChild.nodeValue)*127)
+                                        elif str(l.localName) == 'max':
+                                            hydroData['instruments'][id]['layers'][layer]['max']=int(float(l.firstChild.nodeValue)*127)
+                                        elif str(l.localName) == 'pitch':
+                                            hydroData['instruments'][id]['layers'][layer]['pitch']=int(float(l.firstChild.nodeValue)*127)
+                                        else:
+                                            hydroData['instruments'][id]['layers'][layer][str(l.localName)]=str(l.firstChild.nodeValue)
+                                    except AttributeError:
+                                        pass
+                                layer+=1
+                            
+                            #this means that there is only one layer, set some default values.
+                            elif i.localName == 'filename':
+                                hydroData['instruments'][id]['layers']={}
+                                lfilename=path.join(path.dirname(filename),str(i.firstChild.nodeValue))
+                                hydroData['instruments'][id]['layers'][0]={
+                                    'filename':lfilename,
+                                    'gain': 127,
+                                    'min': 0,
+                                    'max': 127,
+                                    'pitch': 0}
+                            else:
+                                try:
+                                    hydroData['instruments'][id][str(i.localName)]=str(i.firstChild.nodeValue)
+                                except AttributeError:
+                                    pass 
+                        # delete any instrument that has no layers
+                        if (len(hydroData['instruments'][id]['layers'])==0):
+                            del hydroData['instruments'][id]
+                        #TODO: add something here to determine if this instrument is stereo
+            else:
+                hydroData[str(e.localName)] = str(e.firstChild.nodeValue.replace(':','_'))  
+    return hydroData
+
+# converts all non-WAV files to WAV, and updates dict with new path
+# dependencies: flac, sox
+# TODO: find a more cross-platform way of doing this
+def doConversion(hydroData, tempDir='.'):
+    global COPYRIGHT
+    for instrument in hydroData['instruments']:           
+        for layer in hydroData['instruments'][instrument]['layers']:
+            mimeType=mimetypes.guess_type(hydroData['instruments'][instrument]['layers'][layer]['filename'],False)[0]
+            baseName=path.basename(hydroData['instruments'][instrument]['layers'][layer]['filename'])
+            if mimeType != 'audio/x-wav':
+                outFile=path.join(tempDir,baseName.split('.')[0] + mimetypes.guess_extension('audio/x-wav'))
+                if mimeType == 'application/x-flac' or mimeType == 'audio/flac':
+                    cmd = 'flac --totally-silent -d "%s" -o "%s"' % (hydroData['instruments'][instrument]['layers'][layer]['filename'],outFile)
+                else:
+                    cmd = 'sox -q "%s" "%s"' % (hydroData['instruments'][instrument]['layers'][layer]['filename'],outFile)
+                
+                system(cmd)
+                hydroData['instruments'][instrument]['layers'][layer]['filename'] = outFile
+
+def hydrogenToKeymap(hydroData):
+    keyMapData = "BANKNAME:%s\nDESIGNER:%s\nCOPYRIGHT:%s\nRELEASE:%s\nCOMMENT:%s\nPRESETNAME:%s\n\n" % (hydroData['name'], hydroData['author'], COPYRIGHT, RELEASE,hydroData['info'], hydroData['name'])
+    
+    outLayers=[]
+    for instrument in hydroData['instruments']:
+        for layer in hydroData['instruments'][instrument]['layers']:
+            min = hydroData['instruments'][instrument]['layers'][layer]['min']
+            max = hydroData['instruments'][instrument]['layers'][layer]['max']
+            if not outLayers.__contains__((min,max)):
+                outLayers.append((min,max))
+    
+    # loop through layers, add all the stuff to config file
+    for i in outLayers:
+        # sample pre-volume attenuation.
+        atten = 0
+        index=outLayers.index(i)
+        keyMapData += "VLAYER:%d:%d:%d:%d\n" %(index+1,i[0],i[1],atten)
+        for instrument in hydroData['instruments']:           
+            for layer in hydroData['instruments'][instrument]['layers']:
+                min = hydroData['instruments'][instrument]['layers'][layer]['min']
+                max = hydroData['instruments'][instrument]['layers'][layer]['max']
+                if min==i[0] and max==i[1]:
+                    fileL = hydroData['instruments'][instrument]['layers'][layer]['filename']
+                    midiKey = hydroData['instruments'][instrument]['midikey']
+                    keyMapData+="  SAMP:%s:%d:%d:%d\n" %(fileL,midiKey,midiKey,midiKey)      
+    return keyMapData
+
+def hydrogenToSf(drumkitDir,sf2='',stereo=True,tempDir=''):
+    global DEBUG
+    hydroData = parseHydrogenDrumkit(path.join(drumkitDir,'drumkit.xml'))
+    if DEBUG:
+        from pprint import pformat
+        print >>sys.stderr,pformat(hydroData)
+        keyMap = hydrogenToKeymap(hydroData)
+        print >>sys.stderr, keyMap
+    else:
+        if tempDir=='':
+            tempDir = mkdtemp('_'+hydroData['name']+'_sf2')
+        doConversion(hydroData,tempDir)
+        keyMap = hydrogenToKeymap(hydroData)
+        infname = path.join(tempDir,hydroData['name']+'.sfk')
+    
+        try:
+            inf=file(infname, "w")
+        except IOError, msg:
+            print >>sys.stderr, msg
+            sys.exit(1)
+        inf.write(keyMap)
+        inf.close()
+
+        try:
+            inf  = file(infname, "r")
+        except IOError, msg:
+            print >>sys.stderr, msg
+            sys.exit(1)
+        
+        if sf2=='':
+            sf2=hydroData['name']
+        
+        outfname = sf2 + ".sf2"
+    	
+        try:
+    	    outf = file(outfname, "wb")
+        except IOError, msg:
+            print >>sys.stderr, msg
+            sys.exit(1)
+        
+        sf = Sf(outf=outf, stereo=stereo)
+        sf.readKmap(inf, hydroData['name'])
+        sf.writeFromKmap()
+        
+        # all done rm -rf tempdir!
+        remove_tree(tempDir)
+
+def usage(cmd):
+    print >>sys.stderr
+    print >>sys.stderr, "%s: Hydrogen2SF2  using Jeff's soundfont builder/dumper (jMksf)" % cmd
+    print >>sys.stderr
+    print >>sys.stderr, "usage:"
+    print >>sys.stderr, "  %s [<hydrogen_dir>] [<sffile>]  -- build soundfont from drumkit dir" % cmd
+    print >>sys.stderr, "  %s [<hydrogen_file>] [<sffile>] -- build soundfont from .h2drumkit file" % cmd
+    print >>sys.stderr, "  -s = stereo soundfont           -- all samples must be stereo"
+    print >>sys.stderr, "  -t = test mode                  -- don't copy samples, just dump some info"
+    print >>sys.stderr
+    print >>sys.stderr, "  <sffile>  = output soundfont (.sf2) file. Defaults to drumkit name."
+    print >>sys.stderr
+    sys.exit(1)
+
+def main(args):
+    global DEBUG
+    stereo=False
+    tempDir=''
+    sf2=''
+    
+    cmd = path.split(args[0])[-1]
+    del args[0]
+    
+    if len(args) >= 1 and args[0] == "-s":
+        stereo=True
+        del args[0]
+
+    if len(args) >= 1 and args[0] == "-t":
+        DEBUG=True
+        del args[0]
+    
+    if len(args) < 1 or args[0] == "-?" or args[0] == "--help": 
+        usage(cmd)
+        del args[0]
+
+    if args[0].split('.h2drumkit')[-1]!=args[0]:
+        if not DEBUG:
+            tempDir = mkdtemp('_sf2')
+            drumkitDir = tempDir
+            try:
+                tar=tarfile.open(args[0],'r:gz')
+                pwd=getcwd()
+                chdir(drumkitDir)
+                for tarinfo in tar:
+                    if tarinfo.isdir():
+                        drumkitDir = path.join(drumkitDir,tarinfo.name)
+                    tar.extract(tarinfo)
+                tar.close()
+                chdir(pwd)
+                
+            except IOError, msg:
+                print >>sys.stderr, msg
+                sys.exit(1)
+        else:
+            print >>sys.stderr, "Can't untar hydrogen drumkit file in test mode."
+            print >>sys.stderr
+            sys.exit(1)
+    else:
+        drumkitDir = args[0]
+    
+    del args[0]
+    
+    if len(args) >= 1:
+        sf2=args[0]
+    
+    hydrogenToSf(drumkitDir,sf2,stereo,tempDir)
+
+
+
+if __name__ == '__main__':
+    main(sys.argv)
