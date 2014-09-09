@@ -73,7 +73,8 @@ def parseHydrogenDrumkit(filename):
                             del hydroData['instruments'][id]
                         #TODO: add something here to determine if this instrument is stereo
             else:
-                hydroData[str(e.localName)] = str(e.firstChild.nodeValue.replace(':','_'))  
+                if e.firstChild is not None:
+                    hydroData[str(e.localName)] = str(e.firstChild.nodeValue.replace(':','_'))  
     return hydroData
 
 # converts all non-WAV files to WAV, and updates dict with new path
