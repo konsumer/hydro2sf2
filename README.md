@@ -1,53 +1,40 @@
-This script (hydroToSf2) is a tool which allows you to convert a
-Hydrogen drumkit into a SF2 soundfont. It uses Learjeff's soundfont tools
+# hydroToSf2
+A tool which allows you to convert a Hydrogen drumkit into a SF2 soundfont. It uses Learjeff's soundfont tools
 to do all the hard work.
 
-Requirements:
-To use the conversion functions (ie if you have flac or other-then-wav formatted drum samples)
-You will need flac and sox in your path.
-You'll also need pyxml, and tarfile for python (most people should have these) 
+## Requirements
+To use the conversion functions (ie if you have flac or other-then-wav formatted drum samples) You will need `flac` and `sox` in your path. You'll also need `pyxml`, and `tarfile` for python (most people should have these) 
 
 tested on Python 2.4.3 on Ubuntu Dapper Linux
 To get what you need there, type:
-sudo apt-get install python python-xml flac sox
+`sudo apt-get install python python-xml flac sox`
 
-Quick usage:
+## Quick usage
 
-Download drumkits from http://www.hydrogen-music.org/?p=drumkits
+Download [hydrogen drumkits](http://sourceforge.net/projects/hydrogen/files/Sound%20Libraries/Main%20sound%20libraries/)
 
 If it's a .h2kit file, just run the script like this:
-./hydroToSf2 filename.h2kit (replace filename.h2kit with the file)
+`./hydroToSf2 filename.h2kit` (replace filename.h2kit with the file)
 
 if you want to convert an already-installed (in hydrogen GUI) drumkit do this:
-./hydroToSf2 $HOME/.hydrogen/data/kit_name (replace kit_name withe the directory that has the kit.)
+`./hydroToSf2 $HOME/.hydrogen/data/kit_name` (replace kit_name withe the directory that has the kit.)
 
 
-What to do with .SF2 file?:
+## What to do with .SF2 file?
 
 In linux, use swami to look at/play the soundfont.
 
-fluidsynth is a command-line soundfont-loader that works for everybody.
-asfxload will load it onto your emu10k1 running alsa
-sfxload will load it onto your emu10k1 running OSS.
+fluidsynth is a command-line soundfont-loader that works for everybody. asfxload will load it onto your emu10k1 running alsa sfxload will load it onto your emu10k1 running OSS.
 
-After it is loaded you can sequence to it with seq24 or rosegarden
-or whatever.
+After it is loaded you can sequence to it with seq24 or rosegarden or whatever.
 
-Why did I do this?:
-I like the tiny overhead of using my souncard's (emu10k1) built-in wavetable
-better then loading up hydrogen whenever I need a drum maqchine. Hydrogen is
-better then what you get with this, but if you don't need LADSPA effects, humanizing,
-or jack capabilities, this is ideal.  I still use hydrogen for recording into
-ardour, making midi files to be played in seq24 (much nicer interface) or any time I want it
-to sound perfect.
+## Why did I do this?
 
+I like the tiny overhead of using my souncard's (emu10k1) built-in wavetable better then loading up hydrogen whenever I need a drum maqchine. Hydrogen is better then what you get with this, but if you don't need LADSPA effects, humanizing, or jack capabilities, this is ideal.  I still use hydrogen for recording into ardour, making midi files to be played in seq24 (much nicer interface) or any time I want it to sound perfect.
 
+Below is the original README from Learjeff's soundfont tools:
 
-#################################################
-
-Below is the original README from Learjeff's soundfont tools
-
-#################################################
+```
 Learjeff's soundfont tools
 Copyright 2004, Jeff Learman
 
@@ -230,5 +217,5 @@ Jeff
 
 learjef@aol.com
 http://learjeff.com
-
+```
 
