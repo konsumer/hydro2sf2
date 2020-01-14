@@ -1,3 +1,4 @@
 *.pyc
 *.h2drumkit
+*.sf2
 .DS_Store
