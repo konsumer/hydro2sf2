@@ -2,6 +2,11 @@
 A tool which allows you to convert a Hydrogen drumkit into a SF2 soundfont. It uses Learjeff's soundfont tools
 to do all the hard work.
 
+## Depracated
+
+I started working on [hydrotools](https://github.com/konsumer/hydrotools). It should do what this repo does, and more.
+
+
 ## Requirements
 To use the conversion functions (ie if you have flac or other-then-wav formatted drum samples) You will need `flac` and `sox` in your path. You'll also need `pyxml`, and `tarfile` for python (most people should have these) 
 
